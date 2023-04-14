@@ -129,7 +129,9 @@ async def addQuestion(req: Request):  # type: ignore
     question_body = raw_body.decode()
     question = Question(**json.loads(question_body))
     question.qId = str(uuid.uuid1())
-    db["questions"].insert_one({"_id": {"qid": question.qId}, **question.__dict__})
+    data = question.__dict__
+    data["author"] = question.author.__dict__
+    db["questions"].insert_one({"_id": {"qid": question.qId}, **data})
     return True
 
 
@@ -143,3 +145,24 @@ async def addQuestion(qId: str, req: Request):
     data["author"] = answer.author.__dict__
     db["questions"].update_one({"_id.qid": qId}, {"$push": {"answerList": data}})
     return True
+
+
+@app.post("/api/search")
+async def search(req: Request):
+    raw_body = await req.body()
+    search_body = raw_body.decode()
+    query = json.loads(search_body)["query"]
+    questiones = db["questions"].find(
+        {
+            "$or": [
+                {"title": {"$regex": query, "$options": "i"}},
+                {"description": {"$regex": query, "$options": "i"}},
+                {"author.username": {"$regex": query, "$options": "i"}},
+            ]
+        }
+    )
+    questionList = [
+        {"qId": i["qId"], "title": i["title"], "description": i["description"]}
+        for i in questiones
+    ]
+    return questionList
