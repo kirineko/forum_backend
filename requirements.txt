@@ -6,3 +6,4 @@ PyJWT
 passlib
 bcrypt
 python-multipart
+pymongo

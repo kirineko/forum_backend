@@ -9,15 +9,13 @@ from passlib.context import CryptContext
 from starlette.status import HTTP_401_UNAUTHORIZED
 
 import config
+from connections.extensions import db
 from models.token import Token, TokenData
 from models.user import User, UserInDB
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login/access-token")
-
-with open("userDb.json") as data_file:
-    userDb = json.load(data_file)
 
 
 def create_access_token(*, data: dict, expires_delta: timedelta = None):
@@ -41,14 +39,16 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-def get_user(userDb, username: str):
-    if username in userDb:
-        user_dict = userDb[username]
-        return UserInDB(**user_dict)
+def get_user(username: str):
+    user = db["user"].find_one({"_id.username": username}, {"_id": 0})
+    if user:
+        return UserInDB(**user)
+    else:
+        return None
 
 
-def authenticate_user(userDb, username: str, password: str):
-    user = get_user(userDb, username)
+def authenticate_user(username: str, password: str):
+    user = get_user(username)
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
@@ -64,14 +64,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     )
     try:
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
-        print(payload)
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
     except Exception:
         raise credentials_exception
-    user = get_user(userDb, username=token_data.username)
+    print(token_data)
+    user = get_user(username=token_data.username)
     if user is None:
         raise credentials_exception
     return user

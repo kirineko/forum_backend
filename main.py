@@ -1,18 +1,13 @@
 import json
 import uuid
-from datetime import datetime, timedelta
-from typing import List
+from datetime import timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
-from fastapi.security import (
-    OAuth2PasswordBearer,
-    OAuth2PasswordRequestForm,
-    SecurityScopes,
-)
-from pydantic import BaseModel, ValidationError
+from fastapi.security import OAuth2PasswordRequestForm
 from starlette.status import HTTP_401_UNAUTHORIZED
 
 import config
+from connections.extensions import db
 from models.answer import Answer
 from models.question import Question
 from models.token import Token
@@ -23,20 +18,15 @@ from util import (
     get_current_active_user,
     get_current_user,
     get_password_hash,
+    get_user,
 )
 
 app = FastAPI(debug=True)
 
-with open("qaDb.json") as data_file:
-    qaDb = json.load(data_file)
-
-with open("userDb.json") as data_file:
-    userDb = json.load(data_file)
-
 
 @app.post("/api/login/access-token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(userDb, form_data.username, form_data.password)
+    user = authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=HTTP_401_UNAUTHORIZED,
@@ -55,6 +45,18 @@ async def get_profile(current_user: User = Depends(get_current_active_user)):
     return current_user
 
 
+@app.post("/api/profile/upload")
+async def upload_profile(req: Request):
+    raw_body = await req.body()
+    user_body = raw_body.decode()
+    user = json.loads(user_body)
+    db["user"].update_one(
+        {"_id.username": user["username"]},
+        {"$set": {"sex": user["sex"], "age": user["age"], "phone": user["phone"]}},
+    )
+    return get_user(user["username"])
+
+
 @app.get("/api/hello")
 def hello():
     return {"message": ""}
@@ -67,48 +69,58 @@ async def register_user(req: Request):
     new_user = UserInDB(**json.loads(user_body))
 
     new_user.hashed_password = get_password_hash(new_user.password)
-    userDb[new_user.username] = new_user.__dict__
-    with open("userDb.json", "w") as f:
-        f.write(json.dumps(userDb, indent=4, sort_keys=True))
+
+    db["user"].insert_one({"_id": {"username": new_user.username}, **new_user.__dict__})
 
     return "SUCCESS"
 
 
 @app.get("/api/questions")
 async def get_questions():
-    questionList = []
-    for i in qaDb["questions"]:
-        questionList.append(
-            {"qId": i["qId"], "title": i["title"], "description": i["description"]}
-        )
+    questiones = db["questions"].find({})
+
+    questionList = [
+        {"qId": i["qId"], "title": i["title"], "description": i["description"]}
+        for i in questiones
+    ]
     return questionList
 
 
 @app.get("/api/questions/{qId}")
 async def get_question(qId: str):
-    for i in qaDb["questions"]:
-        if i["qId"] == qId:
-            return {
-                "qId": i["qId"],
-                "title": i["title"],
-                "description": i["description"],
-            }
+    question = db["questions"].find_one({"_id.qid": qId})
+
+    if not question:
+        return None
+    else:
+        return {
+            "qId": question["qId"],
+            "title": question["title"],
+            "description": question["description"],
+        }
 
 
 @app.get("/api/questions/{qId}/answers")
 async def get_answers(qId: str):
-    for i in qaDb["questions"]:
-        if i["qId"] == qId:
-            return i["answerList"]
+    question = db["questions"].find_one({"_id.qid": qId})
+
+    if not question:
+        return None
+    return question["answerList"]
 
 
 @app.get("/api/questions/{qId}/answers/{aId}")
 async def get_answer(qId: str, aId: str):
-    for i in qaDb["questions"]:
-        if i["qId"] == qId:
-            for j in i["answerList"]:
-                if j["aId"] == aId:
-                    return j
+    question = db["questions"].find_one({"_id.qid": qId})
+
+    if not question:
+        return None
+
+    for answer in question["answerList"]:
+        if answer["aId"] == aId:
+            return answer
+        else:
+            return None
 
 
 @app.post("/api/questions/add")
@@ -117,9 +129,7 @@ async def addQuestion(req: Request):  # type: ignore
     question_body = raw_body.decode()
     question = Question(**json.loads(question_body))
     question.qId = str(uuid.uuid1())
-    qaDb["questions"].append(question.__dict__)
-    with open("qaDb.json", "w") as f:
-        f.write(json.dumps(qaDb, indent=4, sort_keys=True))
+    db["questions"].insert_one({"_id": {"qid": question.qId}, **question.__dict__})
     return True
 
 
@@ -131,9 +141,5 @@ async def addQuestion(qId: str, req: Request):
     answer.aId = str(uuid.uuid1())
     data = answer.__dict__
     data["author"] = answer.author.__dict__
-    for question in qaDb["questions"]:
-        if question["qId"] == qId:
-            question["answerList"].append(data)
-    with open("qaDb.json", "w") as f:
-        f.write(json.dumps(qaDb, indent=4, sort_keys=True))
+    db["questions"].update_one({"_id.qid": qId}, {"$push": {"answerList": data}})
     return True
