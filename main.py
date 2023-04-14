@@ -1,4 +1,5 @@
 import json
+import pprint
 import uuid
 from datetime import timedelta
 
@@ -119,8 +120,8 @@ async def get_answer(qId: str, aId: str):
     for answer in question["answerList"]:
         if answer["aId"] == aId:
             return answer
-        else:
-            return None
+
+    return None
 
 
 @app.post("/api/questions/add")
@@ -136,7 +137,7 @@ async def addQuestion(req: Request):  # type: ignore
 
 
 @app.post("/api/questions/{qId}/answers/add")
-async def addQuestion(qId: str, req: Request):
+async def addAnswer(qId: str, req: Request):
     raw_body = await req.body()
     answer_body = raw_body.decode()
     answer = Answer(**json.loads(answer_body))
