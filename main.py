@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordRequestForm
+from httpx import delete
 from starlette.status import HTTP_401_UNAUTHORIZED
 
 import config
@@ -99,6 +100,13 @@ async def get_question(qId: str):
             "title": question["title"],
             "description": question["description"],
         }
+
+
+@app.delete("/api/questions/{qId}")
+async def delete_question(qId: str):
+    db["questions"].delete_one({"_id.qid": qId})
+
+    return "SUCCESS"
 
 
 @app.get("/api/questions/{qId}/answers")
