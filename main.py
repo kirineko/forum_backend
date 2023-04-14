@@ -1,11 +1,9 @@
 import json
-import pprint
 import uuid
 from datetime import timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordRequestForm
-from httpx import delete
 from starlette.status import HTTP_401_UNAUTHORIZED
 
 import config
