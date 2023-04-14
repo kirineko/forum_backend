@@ -80,7 +80,12 @@ async def get_questions():
     questiones = db["questions"].find({})
 
     questionList = [
-        {"qId": i["qId"], "title": i["title"], "description": i["description"]}
+        {
+            "qId": i["qId"],
+            "title": i["title"],
+            "description": i["description"],
+            "author": i["author"],
+        }
         for i in questiones
     ]
     return questionList
@@ -97,6 +102,7 @@ async def get_question(qId: str):
             "qId": question["qId"],
             "title": question["title"],
             "description": question["description"],
+            "author": question["author"],
         }
 
 
@@ -169,7 +175,12 @@ async def search(req: Request):
         }
     )
     questionList = [
-        {"qId": i["qId"], "title": i["title"], "description": i["description"]}
+        {
+            "qId": i["qId"],
+            "title": i["title"],
+            "description": i["description"],
+            "author": i["author"],
+        }
         for i in questiones
     ]
     return questionList
